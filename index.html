@@ -447,6 +447,10 @@
             updateBookmarkBadges();
             fetchLiveNews();
             if (window.lucide) lucide.createIcons();
+            // Auto-refresh news every 8 minutes while page is open
+            setInterval(() => {
+                fetchLiveNews();
+            }, 8 * 60 * 1000);
         };
 
         function updateDateDisplay() {
