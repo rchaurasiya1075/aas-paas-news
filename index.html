@@ -484,60 +484,40 @@
         }
 
         async function fetchLiveNews() {
+            // Prefer same-origin news.json (updated by GitHub Action) to avoid CORS
+            try {
+                const localRes = await fetch('./news.json?t=' + Date.now());
+                if (localRes.ok) {
+                    const localData = await localRes.json();
+                    const langKey = currentLang === 'hi' ? 'hi' : 'en';
+                    const feed = localData[langKey];
+                    if (feed && feed.rss) {
+                        const parsed = parseRssJson(feed);
+                        if (parsed.length > 0) {
+                            articles = [...userArticles, ...parsed];
+                            renderTicker();
+                            renderNews();
+                            if (window.lucide) lucide.createIcons();
+                            return;
+                        }
+                    }
+                }
+            } catch (e) {
+                console.log('Local news.json not available, trying proxy...');
+            }
+
+            // Fallback to proxy
             const rssBase = currentLang === 'hi'
                 ? 'https://news.google.com/rss?hl=hi&gl=IN&ceid=IN:hi'
                 : 'https://news.google.com/rss?hl=en-IN&gl=IN&ceid=IN:en';
-            // Using reliable CORS-friendly proxy that returns parsed JSON
             const apiUrl = `https://rssjson.vercel.app/api?url=${encodeURIComponent(rssBase)}`;
             try {
                 const response = await fetch(apiUrl);
                 if (!response.ok) throw new Error('HTTP ' + response.status);
                 const data = await response.json();
-                const channel = data.rss?.channel?.[0];
-                const rawItems = channel?.item || [];
-                if (rawItems.length === 0) throw new Error('No items');
-
-                const live = rawItems.slice(0, 20).map((item, idx) => {
-                    let title = (item.title?.[0] || 'No Title').trim();
-                    let author = 'Google News';
-                    // Source is often in title after " - " or in source field
-                    if (item.source?.[0]?._) {
-                        author = item.source[0]._;
-                    } else {
-                        const parts = title.split(' - ');
-                        if (parts.length > 1) {
-                            title = parts.slice(0, -1).join(' - ');
-                            author = parts[parts.length - 1] || author;
-                        }
-                    }
-                    const rawDesc = item.description?.[0] || item.content?.[0] || '';
-                    const cleanDesc = rawDesc.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim();
-                    const summary = cleanDesc.substring(0, 160) + (cleanDesc.length > 160 ? '...' : '');
-                    const pubDateStr = item.pubDate?.[0] || item.published?.[0];
-                    const pubDate = pubDateStr ? new Date(pubDateStr) : new Date();
-                    const link = item.link?.[0] || '#';
-
-                    return {
-                        id: 'live-' + idx + '-' + pubDate.getTime(),
-                        category: inferCategory(title + ' ' + summary),
-                        titleHi: title,
-                        titleEn: title,
-                        summaryHi: summary || title,
-                        summaryEn: summary || title,
-                        contentHi: cleanDesc || summary || title,
-                        contentEn: cleanDesc || summary || title,
-                        author: author,
-                        authorAvatar: author.charAt(0).toUpperCase(),
-                        date: getTimeAgo(pubDate),
-                        timestamp: pubDate.getTime(),
-                        views: Math.floor(Math.random() * 8000) + 200,
-                        featured: idx < 3,
-                        image: item.thumbnail?.[0] || item.media?.content?.[0]?.$?.url || 'https://images.unsplash.com/photo-1504711434969-e33886168f5c?auto=format&fit=crop&w=800&q=80',
-                        imageCaption: author,
-                        link: link
-                    };
-                });
-                articles = [...userArticles, ...live];
+                const parsed = parseRssJson(data);
+                if (parsed.length === 0) throw new Error('No items');
+                articles = [...userArticles, ...parsed];
             } catch (error) {
                 console.error('Live news fetch failed:', error);
                 showToast('लाइव न्यूज लोड नहीं हो सका। सैंपल डेटा दिखा रहे हैं।', 'info');
@@ -564,6 +544,49 @@
             renderTicker();
             renderNews();
             if (window.lucide) lucide.createIcons();
+        }
+
+        function parseRssJson(data) {
+            const channel = data.rss?.channel?.[0];
+            const rawItems = channel?.item || [];
+            return rawItems.slice(0, 20).map((item, idx) => {
+                let title = (item.title?.[0] || 'No Title').trim();
+                let author = 'Google News';
+                if (item.source?.[0]?._) {
+                    author = item.source[0]._;
+                } else {
+                    const parts = title.split(' - ');
+                    if (parts.length > 1) {
+                        title = parts.slice(0, -1).join(' - ');
+                        author = parts[parts.length - 1] || author;
+                    }
+                }
+                const rawDesc = item.description?.[0] || item.content?.[0] || '';
+                const cleanDesc = rawDesc.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim();
+                const summary = cleanDesc.substring(0, 160) + (cleanDesc.length > 160 ? '...' : '');
+                const pubDateStr = item.pubDate?.[0] || item.published?.[0];
+                const pubDate = pubDateStr ? new Date(pubDateStr) : new Date();
+                const link = item.link?.[0] || '#';
+                return {
+                    id: 'live-' + idx + '-' + pubDate.getTime(),
+                    category: inferCategory(title + ' ' + summary),
+                    titleHi: title,
+                    titleEn: title,
+                    summaryHi: summary || title,
+                    summaryEn: summary || title,
+                    contentHi: cleanDesc || summary || title,
+                    contentEn: cleanDesc || summary || title,
+                    author: author,
+                    authorAvatar: author.charAt(0).toUpperCase(),
+                    date: getTimeAgo(pubDate),
+                    timestamp: pubDate.getTime(),
+                    views: Math.floor(Math.random() * 8000) + 200,
+                    featured: idx < 3,
+                    image: item.thumbnail?.[0] || 'https://images.unsplash.com/photo-1504711434969-e33886168f5c?auto=format&fit=crop&w=800&q=80',
+                    imageCaption: author,
+                    link: link
+                };
+            });
         }
 
         function toggleLanguage() {

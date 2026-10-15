@@ -1,0 +1,40 @@
+name: Update News Feed
+on:
+  schedule:
+    - cron: '0 * * * *'  # every hour
+  workflow_dispatch:     # allow manual trigger
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch and save news JSON
+        run: |
+          python3 - << 'PY'
+          import urllib.request, json, urllib.parse
+          urls = {
+            "hi": "https://news.google.com/rss?hl=hi&gl=IN&ceid=IN:hi",
+            "en": "https://news.google.com/rss?hl=en-IN&gl=IN&ceid=IN:en"
+          }
+          result = {}
+          for lang, rss in urls.items():
+              try:
+                  proxy = f"https://rssjson.vercel.app/api?url={urllib.parse.quote(rss)}"
+                  with urllib.request.urlopen(proxy, timeout=30) as r:
+                      data = json.loads(r.read().decode())
+                      result[lang] = data
+              except Exception as e:
+                  print(f"Failed {lang}: {e}")
+                  result[lang] = None
+          with open("news.json", "w", encoding="utf-8") as f:
+              json.dump(result, f, ensure_ascii=False)
+          print("news.json written")
+          PY
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          git add news.json
+          git diff --staged --quiet || git commit -m "Update live news feed [skip ci]"
+          git push
