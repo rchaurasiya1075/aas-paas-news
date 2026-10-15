@@ -1,8 +1,8 @@
 name: Update News Feed
 on:
   schedule:
-    - cron: '0 * * * *'  # every hour
-  workflow_dispatch:     # allow manual trigger
+    - cron: '*/10 * * * *'  # every 10 minutes
+  workflow_dispatch:        # allow manual trigger
 
 jobs:
   update:
@@ -24,6 +24,7 @@ jobs:
                   with urllib.request.urlopen(proxy, timeout=30) as r:
                       data = json.loads(r.read().decode())
                       result[lang] = data
+                      print(f"{lang}: ok")
               except Exception as e:
                   print(f"Failed {lang}: {e}")
                   result[lang] = None
